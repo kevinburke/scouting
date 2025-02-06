@@ -19,7 +19,7 @@ def process_box_score(content):
         team_match = re.search(r'^\s*(\w+)\s+', line)
         if team_match and team_match.group(1) == "PLAYER":
             team_section = lines[i-1].strip()
-            print(lines[i-1])
+            # print(lines[i-1])
             team_index = 1 if team_section.lower() == game_teams[1].lower() else 0
             continue
 
@@ -65,7 +65,7 @@ def main():
 
     cleaned_rows = cleanup_data(all_rows)
 
-    print("\nFinal output:")
+    # print("\nFinal output:")
     print('\n'.join(','.join(row) for row in cleaned_rows))
 
 if __name__ == "__main__":
