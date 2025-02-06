@@ -1,0 +1,6 @@
+cffi==1.14.6
+greenlet==0.4.13
+hpy==0.0.3
+PyPDF2==3.0.1
+readline==6.2.4.1
+typing_extensions==4.12.2
