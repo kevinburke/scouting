@@ -10,14 +10,18 @@ def process_box_score(content):
 
     lines = content.split('\n')
     for i, line in enumerate(lines):
-        match = re.search(r'(\w+)\s+\([WL]-\d+\)\s+vs\s+(\w+)\s+\([WL]-\d+\)', line)
+        # print(f"Processing line {i}: {line}")  # Debug
+        match = re.search(r'([\w/]+)\s+\([WL]-\d+\)\s+vs\s+([\w/]+)\s+\([WL]-\d+\)', line)
         if match:
+            # print("found match on line", i, "match:", match)  # Debug
             game_teams = [match.group(1), match.group(2)]
             team_index = 0
             continue
 
         team_match = re.search(r'^\s*(\w+)\s+', line)
         if team_match and team_match.group(1) == "PLAYER":
+            if len(game_teams) < 2:
+                raise ValueError("Game teams not found before player section, match:" + str(match))
             team_section = lines[i-1].strip()
             # print(lines[i-1])
             team_index = 1 if team_section.lower() == game_teams[1].lower() else 0
@@ -59,9 +63,13 @@ def main():
         for page in reader.pages:
             content += page.extract_text() + '\n'
 
-        new_rows = process_box_score(content)
-        # print(f"Found {len(new_rows)} rows")  # Debug
-        all_rows.extend(new_rows)
+        try:
+            new_rows = process_box_score(content)
+            # print(f"Found {len(new_rows)} rows")  # Debug
+            all_rows.extend(new_rows)
+        except Exception as e:
+            print(f"Error processing {pdf_file}: {e}", file=sys.stderr, flush=True)
+            raise
 
     cleaned_rows = cleanup_data(all_rows)
 
