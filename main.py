@@ -45,7 +45,40 @@ def process_box_score(content):
             parts = re.split(r'\s+', line.strip())
             if 'Y' in parts:
                 parts.remove('Y')
-            if len(parts) > 10 and parts[0] == '0':
+            if len(parts) > 25 and parts[0] == '0':
+                # Try to find where the second player starts
+                # Look for a pattern like: number followed by letters (player name)
+                split_index = None
+                for i in range(10, len(parts) - 10):  # Don't split too early or too late
+                    # Look for a part that looks like a player name (contains letters)
+                    if re.match(r'^[A-Za-z]', parts[i]):
+                        # Check if the previous part looks like the end of stats (number or percentage)
+                        prev_part = parts[i-1]
+                        if re.match(r'^\d+(\.\d+)?$', prev_part):
+                            split_index = i
+                            break
+
+                if split_index:
+                    print(f"Detected double line, splitting at index {split_index}")
+                    first_player = parts[:split_index]
+                    second_player = parts[split_index:]
+
+                    # Process first player
+                    name1 = game_teams[team_index] if game_teams else "<NO TEAM>"
+                    first_player.insert(0, name1)
+                    rows.append(first_player)
+                    print(f"[Line {i}] Row[{team_index}] for {name1}: {first_player}")
+
+                    # Process second player (same team)
+                    if 'Y' in second_player:
+                        second_player.remove('Y')
+                    name2 = game_teams[team_index] if game_teams else "<NO TEAM>"
+                    second_player.insert(0, name2)
+                    rows.append(second_player)
+                    print(f"[Line {i}] Row[{team_index}] for {name2}: {second_player}")
+                else:
+                    print("Could not find split point for double line")
+            elif len(parts) > 10 and parts[0] == '0':
                 name = game_teams[team_index] if game_teams else "<NO TEAM>"
                 parts.insert(0, name)
                 rows.append(parts)
