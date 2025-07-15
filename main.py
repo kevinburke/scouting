@@ -2,40 +2,56 @@ import sys
 import re
 from PyPDF2 import PdfReader
 
+
 def process_box_score(content):
     rows = []
-    current_team = ''
     game_teams = []
     team_index = 0
+    player_header_count = 0
 
     lines = content.split('\n')
     for i, line in enumerate(lines):
-        # print(f"Processing line {i}: {line}")  # Debug
-        match = re.search(r'([\w/]+)\s+\([WL]-\d+\)\s+vs\s+([\w/]+)\s+\([WL]-\d+\)', line)
-        if match:
-            # print("found match on line", i, "match:", match)  # Debug
-            game_teams = [match.group(1), match.group(2)]
+        # 1) Detect the teams line
+        m = re.search(
+            r'([\w/]+)\s+\([WL]-\d+\)\s+(vs|va)\s+([\w/ ]+)\s+\([WL]-\d+\)',
+            line
+        )
+        if m:
+            game_teams = [m.group(1), m.group(3)]
             team_index = 0
+            player_header_count = 0
+            print(f"[Line {i}] Teams → {game_teams}")
             continue
 
-        team_match = re.search(r'^\s*(\w+)\s+', line)
-        if team_match and team_match.group(1) == "PLAYER":
+        # 2) On PLAYER header, pick team by count or by contains-match
+        if re.match(r'^\s*PLAYER\s+', line):
             if len(game_teams) < 2:
-                raise ValueError("Game teams not found before player section, match:" + str(match))
-            team_section = lines[i-1].strip()
-            # print(lines[i-1])
-            team_index = 1 if team_section.lower() == game_teams[1].lower() else 0
+                raise ValueError(f"[Line {i}] PLAYER but no game_teams yet!")
+            prev = lines[i-1].strip()
+            # Try partial‐string match first
+            if game_teams[1].lower() in prev.lower():
+                team_index = 1
+            elif game_teams[0].lower() in prev.lower():
+                team_index = 0
+            else:
+                # fallback to “first header → team 0, second → team 1”
+                team_index = min(player_header_count, 1)
+            print(f"[Line {i}] PLAYER header; prev line “{prev}” → team_index={team_index}")
+            player_header_count += 1
             continue
 
+        # 3) Collect stat lines
         if re.match(r'^\s*\d', line):
             parts = re.split(r'\s+', line.strip())
-            if len(parts) > 10:
-                if 'Y' in parts:
-                    parts.remove('Y')
-                if parts[0] == '0':
-                    parts.insert(0, game_teams[team_index])
-                    rows.append(parts)
+            if 'Y' in parts:
+                parts.remove('Y')
+            if len(parts) > 10 and parts[0] == '0':
+                name = game_teams[team_index] if game_teams else "<NO TEAM>"
+                parts.insert(0, name)
+                rows.append(parts)
+                print(f"[Line {i}] Row[{team_index}] for {name}: {parts}")
 
+    print(f"Done, total rows = {len(rows)}")
     return rows
 
 def cleanup_data(all_rows):
