@@ -13,7 +13,7 @@ def process_box_score(content):
     for i, line in enumerate(lines):
         # 1) Detect the teams line
         m = re.search(
-            r'([\w/]+)\s+\([WL]-\d+\)\s+(vs|va)\s+([\w/ ]+)\s+\([WL]-\d+\)',
+            r'([\w/]+)\s+\([WL]-\d+\)\s+(vs|va)\s+([\w/\' ]+)\s+\([WL]-\d+\)',
             line
         )
         if m:
