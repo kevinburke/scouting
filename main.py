@@ -1,5 +1,6 @@
 import sys
 import re
+import hashlib
 from PyPDF2 import PdfReader
 
 
@@ -20,7 +21,7 @@ def process_box_score(content):
             game_teams = [m.group(1), m.group(3)]
             team_index = 0
             player_header_count = 0
-            print(f"[Line {i}] Teams → {game_teams}")
+            print(f"[Line {i}] Teams → {game_teams}", file=sys.stderr)
             continue
 
         # 2) On PLAYER header, pick team by count or by contains-match
@@ -36,7 +37,7 @@ def process_box_score(content):
             else:
                 # fallback to “first header → team 0, second → team 1”
                 team_index = min(player_header_count, 1)
-            print(f"[Line {i}] PLAYER header; prev line “{prev}” → team_index={team_index}")
+            print(f"[Line {i}] PLAYER header; prev line \"{prev}\" → team_index={team_index}", file=sys.stderr)
             player_header_count += 1
             continue
 
@@ -59,7 +60,7 @@ def process_box_score(content):
                             break
 
                 if split_index:
-                    print(f"Detected double line, splitting at index {split_index}")
+                    print(f"Detected double line, splitting at index {split_index}", file=sys.stderr)
                     first_player = parts[:split_index]
                     second_player = parts[split_index:]
 
@@ -67,7 +68,7 @@ def process_box_score(content):
                     name1 = game_teams[team_index] if game_teams else "<NO TEAM>"
                     first_player.insert(0, name1)
                     rows.append(first_player)
-                    print(f"[Line {i}] Row[{team_index}] for {name1}: {first_player}")
+                    print(f"[Line {i}] Row[{team_index}] for {name1}: {first_player}", file=sys.stderr)
 
                     # Process second player (same team)
                     if 'Y' in second_player:
@@ -75,16 +76,16 @@ def process_box_score(content):
                     name2 = game_teams[team_index] if game_teams else "<NO TEAM>"
                     second_player.insert(0, name2)
                     rows.append(second_player)
-                    print(f"[Line {i}] Row[{team_index}] for {name2}: {second_player}")
+                    print(f"[Line {i}] Row[{team_index}] for {name2}: {second_player}", file=sys.stderr)
                 else:
-                    print("Could not find split point for double line")
+                    print("Could not find split point for double line", file=sys.stderr)
             elif len(parts) > 10 and parts[0] == '0':
                 name = game_teams[team_index] if game_teams else "<NO TEAM>"
                 parts.insert(0, name)
                 rows.append(parts)
-                print(f"[Line {i}] Row[{team_index}] for {name}: {parts}")
+                print(f"[Line {i}] Row[{team_index}] for {name}: {parts}", file=sys.stderr)
 
-    print(f"Done, total rows = {len(rows)}")
+    print(f"Done, total rows = {len(rows)}", file=sys.stderr)
     return rows
 
 def cleanup_data(all_rows):
@@ -101,8 +102,18 @@ def cleanup_data(all_rows):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: script.py <pdf_file1> <pdf_file2> ...")
+        print("Usage: script.py <pdf_file1> <pdf_file2> ...", file=sys.stderr)
         sys.exit(1)
+
+    # Check for duplicate files (same content, possibly different names)
+    file_hashes = {}  # hash -> filename
+    for pdf_file in sys.argv[1:]:
+        with open(pdf_file, 'rb') as f:
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+        if file_hash in file_hashes:
+            print(f"Error: duplicate file detected: '{pdf_file}' has the same content as '{file_hashes[file_hash]}'", file=sys.stderr)
+            sys.exit(1)
+        file_hashes[file_hash] = pdf_file
 
     all_rows = []
     for pdf_file in sys.argv[1:]:
