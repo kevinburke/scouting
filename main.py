@@ -1,6 +1,7 @@
 import sys
 import re
 import hashlib
+from pathlib import Path
 from PyPDF2 import PdfReader
 
 
@@ -100,14 +101,35 @@ def cleanup_data(all_rows):
        cleaned_rows.append(new_row)
    return cleaned_rows
 
+
+def expand_pdf_inputs(args):
+    pdf_files = []
+    for arg in args:
+        path = Path(arg)
+        if path.is_dir():
+            pdf_files.extend(
+                sorted(
+                    (child for child in path.iterdir() if child.is_file() and child.suffix.lower() == ".pdf"),
+                    key=lambda child: child.name.lower(),
+                )
+            )
+        else:
+            pdf_files.append(path)
+    return [str(path) for path in pdf_files]
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: script.py <pdf_file1> <pdf_file2> ...", file=sys.stderr)
+        print("Usage: script.py <pdf_file_or_directory1> <pdf_file_or_directory2> ...", file=sys.stderr)
+        sys.exit(1)
+
+    pdf_files = expand_pdf_inputs(sys.argv[1:])
+    if not pdf_files:
+        print("Error: no PDF files found", file=sys.stderr)
         sys.exit(1)
 
     # Check for duplicate files (same content, possibly different names)
     file_hashes = {}  # hash -> filename
-    for pdf_file in sys.argv[1:]:
+    for pdf_file in pdf_files:
         with open(pdf_file, 'rb') as f:
             file_hash = hashlib.sha256(f.read()).hexdigest()
         if file_hash in file_hashes:
@@ -116,7 +138,7 @@ def main():
         file_hashes[file_hash] = pdf_file
 
     all_rows = []
-    for pdf_file in sys.argv[1:]:
+    for pdf_file in pdf_files:
         # print(f"\nProcessing {pdf_file}")  # Debug
         reader = PdfReader(pdf_file)
         content = ''
