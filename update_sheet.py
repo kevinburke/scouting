@@ -125,13 +125,13 @@ def build_analysis_block(team, players, start_row, num_raw_rows):
             f'=IFERROR(AN{r}/AO{r},0)',
         ])
 
-    # Blank row
-    rows.append([''] * 20)
-
-    # Summary row
-    sr = lr + 2  # summary row number (blank row in between, after last player)
+    # Summary row (immediately after last player)
+    sr = lr + 1
     summary = [''] * 20
-    summary[4] = f'=SUM(AA{pr}:AA{lr})'                          # AA: OR total
+    summary[1] = f'=MAX(X{pr}:X{lr})'                                # X: Games (max)
+    summary[2] = f'=SUM(Y{pr}:Y{lr})'                                # Y: Points total
+    summary[3] = f'=IFERROR(Y{sr}/X{sr},0)'                          # Z: PPG (team)
+    summary[4] = f'=SUM(AA{pr}:AA{lr})'                              # AA: OR total
     summary[5] = f'=SUM(AB{pr}:AB{lr})'                          # AB: DR total
     summary[7] = f'=SUM(AD{pr}:AD{lr})/MAX(X{pr}:X{lr})'        # AD: Steals/gm
     summary[9] = f'=SUM(AF{pr}:AF{lr})'                          # AF: 2PA total
@@ -162,11 +162,11 @@ def build_analysis_block(team, players, start_row, num_raw_rows):
     )
     rows.append(shooting)
 
-    # Total block height: 1 (team name) + 1 (header) + N (players) + 1 (blank)
+    # Total block height: 1 (team name) + 1 (header) + N (players)
     #   + 1 (summary) + 1 (blank) + 1 (shooting formula) + (2*N - 1) (spill)
     #   + 2 (padding)
-    # = 3*N + 7
-    return rows, 3 * n + 7
+    # = 3*N + 6
+    return rows, 3 * n + 6
 
 
 def clear_formatting(sh, ws):
@@ -206,10 +206,11 @@ def format_analysis(ws, block_infos, end_row):
     for start_row, n_players in block_infos:
         pr = start_row + 2  # first player row (team name + header above)
         lr = start_row + 1 + n_players
-        sr = lr + 2  # summary row
+        sr = lr + 1  # summary row (immediately after last player)
 
-        # Bold team name
+        # Bold team name and summary row
         formats.append({"range": f'W{start_row}', "format": bold})
+        formats.append({"range": f'W{sr}:AP{sr}', "format": bold})
 
         # Player + summary rows: decimal columns
         for col in ['Z', 'AC']:
@@ -226,6 +227,85 @@ def format_analysis(ws, block_infos, end_row):
         formats.append({"range": f'Z{shoot_start}:Z{shoot_end}', "format": pct})
 
     ws.batch_format(formats)
+
+
+def apply_conditional_formatting(sh, ws, end_row):
+    """Highlight free throw columns based on attempt volume and accuracy.
+
+    - Light yellow: player has attempted FTs but fewer than 5 total (small sample)
+    - Light red: 5+ FTA and under 60% FT shooting
+    """
+    # Delete any existing conditional format rules on this sheet
+    metadata = sh.fetch_sheet_metadata(
+        params={"fields": "sheets(properties.sheetId,conditionalFormats)"},
+    )
+    n_rules = 0
+    for sheet_data in metadata.get('sheets', []):
+        if sheet_data['properties']['sheetId'] == ws.id:
+            n_rules = len(sheet_data.get('conditionalFormats', []))
+            break
+
+    requests = []
+    for i in range(n_rules - 1, -1, -1):
+        requests.append({
+            "deleteConditionalFormatRule": {
+                "sheetId": ws.id,
+                "index": i,
+            }
+        })
+
+    # AN=39, AO=40, AP=41 (0-indexed column numbers)
+    ft_range = {
+        "sheetId": ws.id,
+        "startRowIndex": 0,
+        "endRowIndex": end_row,
+        "startColumnIndex": 39,   # AN (FTM)
+        "endColumnIndex": 42,     # through AP (FT%), exclusive
+    }
+
+    # Light yellow (#FFF2CC): 0 < FTA < 5
+    requests.append({
+        "addConditionalFormatRule": {
+            "rule": {
+                "ranges": [ft_range],
+                "booleanRule": {
+                    "condition": {
+                        "type": "CUSTOM_FORMULA",
+                        "values": [{"userEnteredValue": "=AND($AO1>0,$AO1<5)"}],
+                    },
+                    "format": {
+                        "backgroundColor": {
+                            "red": 1.0, "green": 0.949, "blue": 0.8,
+                        },
+                    },
+                },
+            },
+            "index": 0,
+        }
+    })
+
+    # Light red (#F4CCCC): FTA >= 5 and FT% < 60%
+    requests.append({
+        "addConditionalFormatRule": {
+            "rule": {
+                "ranges": [ft_range],
+                "booleanRule": {
+                    "condition": {
+                        "type": "CUSTOM_FORMULA",
+                        "values": [{"userEnteredValue": "=AND($AO1>=5,$AP1<0.6)"}],
+                    },
+                    "format": {
+                        "backgroundColor": {
+                            "red": 0.957, "green": 0.8, "blue": 0.8,
+                        },
+                    },
+                },
+            },
+            "index": 1,
+        }
+    })
+
+    sh.batch_update({"requests": requests})
 
 
 def main():
@@ -288,9 +368,10 @@ def main():
         raw=False,
     )
 
-    # Apply number formatting
+    # Apply number formatting and conditional formatting
     print("Applying formatting...", file=sys.stderr)
     format_analysis(ws, block_infos, end_row)
+    apply_conditional_formatting(sh, ws, end_row)
 
     print("Done.", file=sys.stderr)
 
