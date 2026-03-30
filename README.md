@@ -26,12 +26,12 @@ Each row is one player's stats for one game:
 
 ### Update Google Sheet
 
-    venv/bin/python update_sheet.py data/2026/o35
+    venv/bin/python update_sheet.py --sheet-name "O35 2026" data/2026/o35
 
-This will:
+The `--sheet-name` flag specifies which worksheet tab to update. This will:
 
 1. Run `main.py` on the given PDFs to extract per-game stats.
-2. Write the raw data to columns A-U of the "O35 2026" sheet, sorted by team
+2. Write the raw data to columns A-U of the named sheet, sorted by team
    then date.
 3. Generate per-team analysis blocks in columns W-AP, each containing:
    - Team name (bold)

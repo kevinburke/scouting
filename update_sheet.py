@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Update Google Sheet with scouting data from PDFs.
 
-Usage: update_sheet.py <pdf_directory_or_files...>
+Usage: update_sheet.py --sheet-name "O35 2026" <pdf_directory_or_files...>
 
-Writes raw per-game player stats to columns A-U of the "O35 2026" sheet,
+Writes raw per-game player stats to columns A-U of the named sheet,
 then generates per-team analysis blocks in columns W-AP.
 """
 
+import argparse
 import subprocess
 import sys
 from collections import defaultdict
@@ -14,7 +15,6 @@ from collections import defaultdict
 import gspread
 
 SPREADSHEET_ID = '1eQjM2vG4t6aASjxoRgW_83EVyk1xBu85nrLxHsRcg0U'
-SHEET_NAME = 'O35 2026'
 CREDENTIALS_FILE = 'config/credentials.json'
 
 # Raw data columns (A-U):
@@ -229,21 +229,31 @@ def format_analysis(ws, block_infos, end_row):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: update_sheet.py <pdf_directory_or_files...>", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Update a Google Sheet with scouting data from PDFs.",
+    )
+    parser.add_argument(
+        '--sheet-name', required=True,
+        help='Name of the worksheet tab to update (e.g. "O35 2026")',
+    )
+    parser.add_argument(
+        'pdfs', nargs='+', metavar='PDF',
+        help='PDF files or directories containing PDFs',
+    )
+    args = parser.parse_args()
 
     print("Running main.py to extract data...", file=sys.stderr)
-    raw_rows = get_csv_data(sys.argv[1:])
+    raw_rows = get_csv_data(args.pdfs)
     print(f"Got {len(raw_rows)} player-game rows", file=sys.stderr)
 
     rosters = build_team_rosters(raw_rows)
     print(f"Teams: {', '.join(rosters.keys())}", file=sys.stderr)
 
-    print("Connecting to Google Sheets...", file=sys.stderr)
+    print(f"Connecting to Google Sheets (sheet: {args.sheet_name!r})...",
+          file=sys.stderr)
     gc = gspread.service_account(filename=CREDENTIALS_FILE)
     sh = gc.open_by_key(SPREADSHEET_ID)
-    ws = sh.worksheet(SHEET_NAME)
+    ws = sh.worksheet(args.sheet_name)
 
     # Clear values and formatting
     ws.clear()
