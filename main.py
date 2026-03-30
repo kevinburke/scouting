@@ -1,8 +1,44 @@
 import sys
 import re
 import hashlib
+from datetime import date
 from pathlib import Path
 from PyPDF2 import PdfReader
+
+MONTH_ABBREVS = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+
+
+def parse_date_from_filename(filepath):
+    """Extract game date from filename like SO35_Team1_Team2_mar2.pdf.
+
+    Looks for a year in the directory path (e.g. data/2026/o35/).
+    Returns a date string like '2026-03-02'.
+    """
+    path = Path(filepath)
+    year = None
+    for parent in path.parents:
+        try:
+            y = int(parent.name)
+            if 2020 <= y <= 2040:
+                year = y
+                break
+        except ValueError:
+            continue
+    if year is None:
+        year = date.today().year
+
+    date_part = path.stem.split('_')[-1]
+    m = re.match(r'([a-zA-Z]+)(\d+)$', date_part)
+    if not m:
+        raise ValueError(f"cannot parse date from filename: {filepath}")
+    month_str, day_str = m.group(1).lower(), m.group(2)
+    month = MONTH_ABBREVS.get(month_str)
+    if month is None:
+        raise ValueError(f"unknown month abbreviation {month_str!r} in {filepath}")
+    return f'{month}/{int(day_str)}/{year}'
 
 
 def process_box_score(content):
@@ -139,15 +175,16 @@ def main():
 
     all_rows = []
     for pdf_file in pdf_files:
-        # print(f"\nProcessing {pdf_file}")  # Debug
         reader = PdfReader(pdf_file)
         content = ''
         for page in reader.pages:
             content += page.extract_text() + '\n'
 
         try:
+            game_date = parse_date_from_filename(pdf_file)
             new_rows = process_box_score(content)
-            # print(f"Found {len(new_rows)} rows")  # Debug
+            for row in new_rows:
+                row.append(game_date)
             all_rows.extend(new_rows)
         except Exception as e:
             print(f"Error processing {pdf_file}: {e}", file=sys.stderr, flush=True)
@@ -155,7 +192,19 @@ def main():
 
     cleaned_rows = cleanup_data(all_rows)
 
-    # print("\nFinal output:")
+    # The date was appended to the end of each row before cleanup.
+    # Move it to index 2 (after team, player) for output.
+    for row in cleaned_rows:
+        game_date = row.pop()
+        row.insert(2, game_date)
+
+    # Sort by team (col 0), then date (col 2), then player (col 1)
+    def sort_key(row):
+        # Parse m/d/yyyy for proper date sorting
+        parts = row[2].split('/')
+        return (row[0], (int(parts[2]), int(parts[0]), int(parts[1])), row[1])
+    cleaned_rows.sort(key=sort_key)
+
     print('\n'.join(','.join(row) for row in cleaned_rows))
 
 if __name__ == "__main__":
